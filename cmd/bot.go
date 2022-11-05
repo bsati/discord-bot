@@ -1,7 +1,17 @@
 package main
 
-import "fmt"
+import (
+	"github.com/bsati/discord-bot/core"
+)
 
 func main() {
-	fmt.Println("Hello World")
+	bot, err := core.NewBot(nil)
+	if err != nil {
+		panic(err)
+	}
+
+	err = bot.Run()
+	if err != nil {
+		panic(err)
+	}
 }

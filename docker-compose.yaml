@@ -2,3 +2,19 @@ version: "3.9"
 services:
   bot:
     build: .
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: discord-bot
+      POSTGRES_HOST: bot-db
+    depends_on:
+      - database
+  database:
+    container_name: bot-db
+    image: 'postgres:latest'
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: discord-bot
