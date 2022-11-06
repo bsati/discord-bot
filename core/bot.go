@@ -1,10 +1,12 @@
 package core
 
 import (
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/bsati/discord-bot/interactions"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -21,6 +23,10 @@ func NewBot(config_path *string) (*Bot, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Println("Bot connected")
+	log.Println("Initializing InteractionRegistry")
+	interactions.InitInteractionRegistry(dg)
+	log.Println("InteractionRegistry initiliazed")
 
 	return &Bot{env: env, dgSession: dg}, nil
 }
