@@ -7,6 +7,8 @@ services:
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: discord-bot
       POSTGRES_HOST: bot-db
+    env_file:
+      - .env
     depends_on:
       - database
   database:
