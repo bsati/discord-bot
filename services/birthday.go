@@ -10,6 +10,7 @@ import (
 type BirthdayService interface {
 	GetBirthdays() ([]models.Birthday, error)
 	AddBirthday(userId string, date time.Time) (*models.Birthday, error)
+	RemoveBirthday(userId string) error
 }
 
 type birthdayService struct {
@@ -26,4 +27,8 @@ func (bs *birthdayService) GetBirthdays() ([]models.Birthday, error) {
 
 func (bs *birthdayService) AddBirthday(userId string, date time.Time) (*models.Birthday, error) {
 	return bs.birthdayDAO.AddBirthday(userId, date)
+}
+
+func (bs *birthdayService) RemoveBirthday(userId string) error {
+	return bs.birthdayDAO.RemoveBirthday(userId)
 }

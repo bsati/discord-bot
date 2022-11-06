@@ -1,17 +1,18 @@
 package interactions
 
 import (
-	"log"
+	"time"
 
+	"github.com/bsati/discord-bot/services"
 	"github.com/bwmarrin/discordgo"
 )
 
 type BirthdayInteractions struct {
 }
 
-func (domain *BirthdayInteractions) CreateInteractions(session *discordgo.Session) *map[string][]*InteractionInfo {
+func (domain *BirthdayInteractions) GetInteractions(session *discordgo.Session) []*discordgo.ApplicationCommand {
 	minMonth := 1.0
-	interactions := []*discordgo.ApplicationCommand{
+	return []*discordgo.ApplicationCommand{
 		{
 			Name:        "birthday",
 			Description: "Add / remove your birthday.",
@@ -56,28 +57,21 @@ func (domain *BirthdayInteractions) CreateInteractions(session *discordgo.Sessio
 			},
 		},
 	}
-
-	registeredInteractions := make(map[string][]*InteractionInfo)
-
-	for _, guild := range session.State.Guilds {
-		registeredInteractions[guild.ID] = make([]*InteractionInfo, len(interactions))
-		for i, v := range interactions {
-			cmd, err := session.ApplicationCommandCreate(session.State.User.ID, guild.ID, v)
-			if err != nil {
-				log.Panicf("Cannot create '%v' command: %v", v.Name, err)
-			}
-			registeredInteractions[guild.ID][i] = &InteractionInfo{
-				AppID:   cmd.ApplicationID,
-				GuildID: cmd.GuildID,
-				CmdID:   cmd.ID,
-			}
-		}
-	}
-	return &registeredInteractions
 }
 
-func (domain *BirthdayInteractions) CreateHandlers() *map[string]*InteractionHandler {
-	handlers := make(map[string]*InteractionHandler)
-
+func (domain *BirthdayInteractions) CreateHandlers(serviceRegistry *services.ServiceRegistry) *map[string]InteractionHandler {
+	handlers := make(map[string]InteractionHandler)
+	handlers["birthday"] = handleBirthday(serviceRegistry)
 	return &handlers
+}
+
+func handleBirthday(birthdayService services.BirthdayService) InteractionHandler {
+	return func(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
+		options := interactionOptionsToMap(interaction)
+		if _, ok := options["remove"]; ok {
+			return birthdayService.RemoveBirthday(interaction.Member.User.ID)
+		}
+		birthdayService.AddBirthday(interaction.Member.User.ID, time.Now())
+		return nil
+	}
 }

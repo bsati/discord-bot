@@ -3,35 +3,66 @@ package interactions
 import (
 	"log"
 
+	"github.com/bsati/discord-bot/services"
 	"github.com/bwmarrin/discordgo"
 )
 
 type InteractionRegistry struct {
-	handlers               map[string]*InteractionHandler
+	handlers               map[string]InteractionHandler
 	registeredInteractions map[string][]*InteractionInfo
 }
 
-func InitInteractionRegistry(session *discordgo.Session) *InteractionRegistry {
+func InitInteractionHandling(session *discordgo.Session, serviceRegistry *services.ServiceRegistry) {
 	registry := InteractionRegistry{
-		make(map[string]*InteractionHandler),
+		make(map[string]InteractionHandler),
 		make(map[string][]*InteractionInfo),
 	}
 
-	registry.registerDomain(&BirthdayInteractions{}, session)
+	birthdayInteractions := registry.registerDomain(&BirthdayInteractions{}, session, serviceRegistry)
 
-	return &registry
+	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		if handler, ok := registry.handlers[i.ApplicationCommandData().Name]; ok {
+			err := handler(s, i)
+			if err != nil {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Flags:   discordgo.MessageFlagsEphemeral,
+						Content: err.Error(),
+					},
+				})
+			}
+		}
+	})
+
+	interactions := make([]*discordgo.ApplicationCommand, 0)
+	interactions = append(interactions, birthdayInteractions...)
+
+	session.AddHandler(func(s *discordgo.Session, e *discordgo.Ready) {
+		registeredInteractions := make(map[string][]*InteractionInfo, len(interactions))
+
+		for _, guild := range session.State.Guilds {
+			log.Printf("Initializing Interactions for Guild with ID: %s, Name: %s\n", guild.ID, guild.Name)
+			registeredInteractions[guild.ID] = make([]*InteractionInfo, len(interactions))
+			for i, v := range interactions {
+				cmd, err := session.ApplicationCommandCreate(session.State.User.ID, guild.ID, v)
+				if err != nil {
+					log.Panicf("Cannot create '%v' command: %v", v.Name, err)
+				}
+				registeredInteractions[guild.ID][i] = &InteractionInfo{
+					AppID:   cmd.ApplicationID,
+					GuildID: cmd.GuildID,
+					CmdID:   cmd.ID,
+				}
+			}
+		}
+	})
 }
 
-func (registry *InteractionRegistry) registerDomain(domain InteractionDomain, session *discordgo.Session) {
-	interactions := domain.CreateInteractions(session)
-	for key, val := range *interactions {
-		if current, ok := registry.registeredInteractions[key]; ok {
-			registry.registeredInteractions[key] = append(current, val...)
-		} else {
-			registry.registeredInteractions[key] = val
-		}
-	}
-	handlers := domain.CreateHandlers()
+func (registry *InteractionRegistry) registerDomain(domain InteractionDomain, session *discordgo.Session, serviceRegistry *services.ServiceRegistry) []*discordgo.ApplicationCommand {
+	interactions := domain.GetInteractions(session)
+
+	handlers := domain.CreateHandlers(serviceRegistry)
 	for key, val := range *handlers {
 		if _, ok := registry.handlers[key]; ok {
 			log.Printf("Interaction handler \"%s\" has already been registered and is about to be reregistered by domain \"%T\", skipping.\n", key, domain)
@@ -40,6 +71,7 @@ func (registry *InteractionRegistry) registerDomain(domain InteractionDomain, se
 		}
 	}
 	log.Printf("Registered domain \"%T\"\n", domain)
+	return interactions
 }
 
 type InteractionInfo struct {
@@ -49,8 +81,8 @@ type InteractionInfo struct {
 }
 
 type InteractionDomain interface {
-	CreateInteractions(session *discordgo.Session) *map[string][]*InteractionInfo
-	CreateHandlers() *map[string]*InteractionHandler
+	GetInteractions(session *discordgo.Session) []*discordgo.ApplicationCommand
+	CreateHandlers(serviceRegistry *services.ServiceRegistry) *map[string]InteractionHandler
 }
 
-type InteractionHandler func(session *discordgo.Session, interaction *discordgo.InteractionCreate)
+type InteractionHandler func(session *discordgo.Session, interaction *discordgo.InteractionCreate) error

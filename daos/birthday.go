@@ -12,22 +12,23 @@ type BirthdayDAO interface {
 	GetBirthdaysByDate(date time.Time) ([]models.Birthday, error)
 	GetBirthdayByUserId(userId string) (models.Birthday, error)
 	AddBirthday(userId string, date time.Time) (*models.Birthday, error)
+	RemoveBirthday(userId string) error
 }
 
-type birthdayRepositorySQL struct {
+type birthdayDAOSQL struct {
 	db *sql.DB
 }
 
-func NewBirthdayRepository(db *sql.DB) BirthdayDAO {
-	return &birthdayRepositorySQL{db: db}
+func NewBirthdayDAO(db *sql.DB) BirthdayDAO {
+	return &birthdayDAOSQL{db: db}
 }
 
-func (br *birthdayRepositorySQL) GetBirthdays() ([]models.Birthday, error) {
+func (br *birthdayDAOSQL) GetBirthdays() ([]models.Birthday, error) {
 	rows, err := br.db.Query(`SELECT * FROM Birthdays`)
 	return scanBirthdayRows(rows, err)
 }
 
-func (br *birthdayRepositorySQL) GetBirthdaysByDate(date time.Time) ([]models.Birthday, error) {
+func (br *birthdayDAOSQL) GetBirthdaysByDate(date time.Time) ([]models.Birthday, error) {
 	rows, err := br.db.Query(`SELECT * FROM Birthdays WHERE Date = ?`, date)
 	return scanBirthdayRows(rows, err)
 }
@@ -48,17 +49,21 @@ func scanBirthdayRows(rows *sql.Rows, err error) ([]models.Birthday, error) {
 	return result, nil
 }
 
-func (br *birthdayRepositorySQL) GetBirthdayByUserId(userId string) (models.Birthday, error) {
+func (br *birthdayDAOSQL) GetBirthdayByUserId(userId string) (models.Birthday, error) {
 	var result models.Birthday
 	err := br.db.QueryRow(`SELECT * FROM Birthdays WHERE UserId = ?`, userId).Scan(&result.Id, &result.UserId, &result.Date)
 	return result, err
 }
 
-func (br *birthdayRepositorySQL) AddBirthday(userId string, date time.Time) (*models.Birthday, error) {
+func (br *birthdayDAOSQL) AddBirthday(userId string, date time.Time) (*models.Birthday, error) {
 	result := &models.Birthday{
 		UserId: userId,
 		Date:   date,
 	}
 	err := br.db.QueryRow(`INSERT INTO Birthdays (UserId, Date) VALUES (?, ?) RETURNING Id`, userId, date).Scan(result.Id)
 	return result, err
+}
+
+func (br *birthdayDAOSQL) RemoveBirthday(userId string) error {
+	return br.db.QueryRow(`DELETE FROM Birthdays WHERE UserId = ?`, userId).Err()
 }

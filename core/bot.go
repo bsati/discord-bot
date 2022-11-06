@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/bsati/discord-bot/interactions"
+	"github.com/bsati/discord-bot/services"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -24,8 +25,11 @@ func NewBot(config_path *string) (*Bot, error) {
 		return nil, err
 	}
 	log.Println("Bot connected")
+	log.Println("Initializing Services")
+	serviceRegistry := services.InitServices(env.DB)
+	log.Println("Services initialized")
 	log.Println("Initializing InteractionRegistry")
-	interactions.InitInteractionRegistry(dg)
+	interactions.InitInteractionHandling(dg, serviceRegistry)
 	log.Println("InteractionRegistry initiliazed")
 
 	return &Bot{env: env, dgSession: dg}, nil
