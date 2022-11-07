@@ -60,7 +60,7 @@ func (br *birthdayDAOSQL) AddBirthday(userId string, date time.Time) (*models.Bi
 		UserId: userId,
 		Date:   date,
 	}
-	err := br.db.QueryRow(`INSERT INTO Birthdays (UserId, Date) VALUES (?, ?) RETURNING Id`, userId, date).Scan(result.Id)
+	err := br.db.QueryRow(`INSERT INTO Birthdays(UserId, Date) VALUES (?, ?) RETURNING Id`, userId, date).Scan(result.Id)
 	return result, err
 }
 

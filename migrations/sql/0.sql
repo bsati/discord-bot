@@ -1,0 +1,1 @@
+CREATE DATABASE discord_bot

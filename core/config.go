@@ -11,7 +11,7 @@ type Config struct {
 	BotToken           string
 }
 
-func loadConfig(filepath *string) Config {
+func LoadConfig(filepath *string) Config {
 	if filepath == nil {
 		return *loadConfigFromEnv()
 	}
@@ -45,7 +45,12 @@ func loadConfigFromEnv() *Config {
 	if dbPort == "" {
 		dbPort = "5432"
 	}
-	connectionString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPass, dbName)
+	var connectionString string
+	if dbName == "" {
+		connectionString = fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=disable", dbHost, dbPort, dbUser, dbPass)
+	} else {
+		connectionString = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPass, dbName)
+	}
 	botToken := os.Getenv("BOT_TOKEN")
 	return &Config{
 		DbConnectionString: connectionString,

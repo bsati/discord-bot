@@ -10,3 +10,13 @@ func interactionOptionsToMap(interaction *discordgo.InteractionCreate) map[strin
 	}
 	return optionMap
 }
+
+func interactionPrivateMessageResponse(s *discordgo.Session, i *discordgo.InteractionCreate, message string) {
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags:   discordgo.MessageFlagsEphemeral,
+			Content: message,
+		},
+	})
+}

@@ -6,6 +6,6 @@ COPY . /app
 
 WORKDIR /app
 
-RUN go build /app/cmd/bot.go
+RUN go build /app/cmd/bot/bot.go
 
 CMD ["/app/bot"]

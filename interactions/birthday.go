@@ -7,10 +7,10 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-type BirthdayInteractions struct {
+type birthdayInteractions struct {
 }
 
-func (domain *BirthdayInteractions) GetInteractions(session *discordgo.Session) []*discordgo.ApplicationCommand {
+func (domain *birthdayInteractions) GetInteractions(session *discordgo.Session) []*discordgo.ApplicationCommand {
 	minMonth := 1.0
 	return []*discordgo.ApplicationCommand{
 		{
@@ -59,17 +59,25 @@ func (domain *BirthdayInteractions) GetInteractions(session *discordgo.Session) 
 	}
 }
 
-func (domain *BirthdayInteractions) CreateHandlers(serviceRegistry *services.ServiceRegistry) *map[string]InteractionHandler {
-	handlers := make(map[string]InteractionHandler)
+func (domain *birthdayInteractions) CreateHandlers(serviceRegistry *services.ServiceRegistry) *map[string]interactionHandler {
+	handlers := make(map[string]interactionHandler)
 	handlers["birthday"] = handleBirthday(serviceRegistry)
 	return &handlers
 }
 
-func handleBirthday(birthdayService services.BirthdayService) InteractionHandler {
+func handleBirthday(birthdayService services.BirthdayService) interactionHandler {
 	return func(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
 		options := interactionOptionsToMap(interaction)
 		if _, ok := options["remove"]; ok {
 			return birthdayService.RemoveBirthday(interaction.Member.User.ID)
+		}
+		if opt, ok := options["date"]; ok {
+			parsed, err := time.Parse("02.01.2006", opt.StringValue())
+			if err != nil {
+				return newInteractionError("Invalid date format")
+			}
+			_, err = birthdayService.AddBirthday(interaction.Member.User.ID, parsed)
+			interactionPrivateMessageResponse(session, interaction, "Birthday registered! 🎉🎉")
 		}
 		birthdayService.AddBirthday(interaction.Member.User.ID, time.Now())
 		return nil

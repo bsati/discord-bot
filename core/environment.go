@@ -10,6 +10,6 @@ type Env struct {
 
 func BuildEnv(config *Config) *Env {
 	return &Env{
-		DB: dbConnect(config.DbConnectionString),
+		DB: DBConnect(config.DbConnectionString),
 	}
 }

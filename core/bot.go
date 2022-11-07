@@ -17,7 +17,7 @@ type Bot struct {
 }
 
 func NewBot(config_path *string) (*Bot, error) {
-	cfg := loadConfig(config_path)
+	cfg := LoadConfig(config_path)
 	env := BuildEnv(&cfg)
 
 	dg, err := discordgo.New("Bot " + cfg.BotToken)

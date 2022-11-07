@@ -1,14 +1,25 @@
 version: "3.9"
 services:
   bot:
-    build: .
+    build:
+      context: ./
+      dockerfile: ./cmd/bot/Dockerfile
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: discord-bot
-      POSTGRES_HOST: bot-db
+      POSTGRES_DB: discord_bot
     env_file:
       - .env
+      - db.env
+    depends_on:
+      - db_migration
+  db_migration:
+    build:
+      context: ./
+      dockerfile: ./cmd/migrate/Dockerfile
+    command:
+      - /app/migrate
+      - "1"
+    env_file:
+      - db.env
     depends_on:
       - database
   database:
@@ -16,7 +27,5 @@ services:
     image: 'postgres:latest'
     ports:
       - 5432:5432
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: discord-bot
+    env_file:
+      - db.env
