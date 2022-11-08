@@ -18,6 +18,9 @@ services:
     command:
       - /app/migrate
       - "1"
+      - "1"
+    environment:
+      DB_NAME: discord_bot
     env_file:
       - db.env
     depends_on:

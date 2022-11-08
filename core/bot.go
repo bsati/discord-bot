@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/bsati/discord-bot/daos"
 	"github.com/bsati/discord-bot/interactions"
-	"github.com/bsati/discord-bot/services"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -26,10 +26,10 @@ func NewBot(config_path *string) (*Bot, error) {
 	}
 	log.Println("Bot connected")
 	log.Println("Initializing Services")
-	serviceRegistry := services.InitServices(env.DB)
+	dao := daos.NewDAO(env.DB)
 	log.Println("Services initialized")
 	log.Println("Initializing InteractionRegistry")
-	interactions.InitInteractionHandling(dg, serviceRegistry)
+	interactions.InitInteractionHandling(dg, dao)
 	log.Println("InteractionRegistry initiliazed")
 
 	return &Bot{env: env, dgSession: dg}, nil

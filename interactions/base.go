@@ -3,7 +3,7 @@ package interactions
 import (
 	"log"
 
-	"github.com/bsati/discord-bot/services"
+	"github.com/bsati/discord-bot/daos"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -12,13 +12,13 @@ type InteractionRegistry struct {
 	registeredInteractions map[string][]*interactionInfo
 }
 
-func InitInteractionHandling(session *discordgo.Session, serviceRegistry *services.ServiceRegistry) {
+func InitInteractionHandling(session *discordgo.Session, dao *daos.DAO) {
 	registry := InteractionRegistry{
 		make(map[string]interactionHandler),
 		make(map[string][]*interactionInfo),
 	}
 
-	birthdayInteractions := registry.registerDomain(&birthdayInteractions{}, session, serviceRegistry)
+	birthdayInteractions := registry.registerDomain(&birthdayInteractions{}, session, dao)
 
 	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if handler, ok := registry.handlers[i.ApplicationCommandData().Name]; ok {
@@ -53,10 +53,10 @@ func InitInteractionHandling(session *discordgo.Session, serviceRegistry *servic
 	})
 }
 
-func (registry *InteractionRegistry) registerDomain(domain interactionDomain, session *discordgo.Session, serviceRegistry *services.ServiceRegistry) []*discordgo.ApplicationCommand {
+func (registry *InteractionRegistry) registerDomain(domain interactionDomain, session *discordgo.Session, dao *daos.DAO) []*discordgo.ApplicationCommand {
 	interactions := domain.GetInteractions(session)
 
-	handlers := domain.CreateHandlers(serviceRegistry)
+	handlers := domain.CreateHandlers(dao)
 	for key, val := range *handlers {
 		if _, ok := registry.handlers[key]; ok {
 			log.Printf("Interaction handler \"%s\" has already been registered and is about to be reregistered by domain \"%T\", skipping.\n", key, domain)
@@ -76,7 +76,7 @@ type interactionInfo struct {
 
 type interactionDomain interface {
 	GetInteractions(session *discordgo.Session) []*discordgo.ApplicationCommand
-	CreateHandlers(serviceRegistry *services.ServiceRegistry) *map[string]interactionHandler
+	CreateHandlers(serviceRegistry *daos.DAO) *map[string]interactionHandler
 }
 
 type interactionHandler func(session *discordgo.Session, interaction *discordgo.InteractionCreate) error
