@@ -14,11 +14,16 @@ type InteractionRegistry struct {
 
 func InitInteractionHandling(session *discordgo.Session, dao *daos.DAO) {
 	registry := InteractionRegistry{
-		make(map[string]interactionHandler),
-		make(map[string][]*interactionInfo),
+		handlers: make(map[string]interactionHandler),
 	}
 
-	birthdayInteractions := registry.registerDomain(&birthdayInteractions{}, session, dao)
+	domains := []interactionDomain{&birthdayInteractions{}, &generalInteractions{}}
+
+	interactions := []*discordgo.ApplicationCommand{}
+	for _, domain := range domains {
+		domainInteractions := registry.registerDomain(domain, session, dao)
+		interactions = append(interactions, domainInteractions...)
+	}
 
 	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if handler, ok := registry.handlers[i.ApplicationCommandData().Name]; ok {
@@ -29,14 +34,14 @@ func InitInteractionHandling(session *discordgo.Session, dao *daos.DAO) {
 		}
 	})
 
-	interactions := make([]*discordgo.ApplicationCommand, 0)
-	interactions = append(interactions, birthdayInteractions...)
-
 	session.AddHandler(func(s *discordgo.Session, e *discordgo.Ready) {
 		registeredInteractions := make(map[string][]*interactionInfo, len(interactions))
 
 		for _, guild := range session.State.Guilds {
 			log.Printf("Initializing Interactions for Guild with ID: %s, Name: %s\n", guild.ID, guild.Name)
+			for _, domain := range domains {
+				domain.InitGuild(s, guild, dao)
+			}
 			registeredInteractions[guild.ID] = make([]*interactionInfo, len(interactions))
 			for i, v := range interactions {
 				cmd, err := session.ApplicationCommandCreate(session.State.User.ID, guild.ID, v)
@@ -50,6 +55,8 @@ func InitInteractionHandling(session *discordgo.Session, dao *daos.DAO) {
 				}
 			}
 		}
+
+		registry.registeredInteractions = registeredInteractions
 	})
 }
 
@@ -76,7 +83,8 @@ type interactionInfo struct {
 
 type interactionDomain interface {
 	GetInteractions(session *discordgo.Session) []*discordgo.ApplicationCommand
-	CreateHandlers(serviceRegistry *daos.DAO) *map[string]interactionHandler
+	CreateHandlers(dao *daos.DAO) *map[string]interactionHandler
+	InitGuild(session *discordgo.Session, guild *discordgo.Guild, dao *daos.DAO)
 }
 
 type interactionHandler func(session *discordgo.Session, interaction *discordgo.InteractionCreate) error

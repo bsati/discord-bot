@@ -8,12 +8,13 @@ import (
 )
 
 type BirthdayDAO interface {
-	GetBirthdays(limit int, from time.Time) ([]models.Birthday, error)
-	GetBirthdayByUserId(userId string) (models.Birthday, error)
-	GetUpcomingBirthdaysForMonths(months int, from time.Time) ([]models.Birthday, error)
-	GetBirthdaysOfMonth(month int) ([]models.Birthday, error)
-	AddBirthday(userId string, date time.Time) (*models.Birthday, error)
-	RemoveBirthday(userId string) error
+	GetBirthdays(guildId string, limit int, from time.Time) ([]models.Birthday, error)
+	GetBirthdayByUserId(userId, guildId string) (models.Birthday, error)
+	GetUpcomingBirthdaysForMonths(guildId string, months int, from time.Time) ([]models.Birthday, error)
+	GetBirthdaysByMonth(guildId string, month int) ([]models.Birthday, error)
+	GetBirthdaysByDay(guildId string, day time.Time) ([]models.Birthday, error)
+	AddBirthday(userId, guildId string, date time.Time) (*models.Birthday, error)
+	RemoveBirthday(userId, guildId string) error
 }
 
 type birthdayDAOSQL struct {
@@ -24,26 +25,36 @@ func NewBirthdayDAO(db *sql.DB) BirthdayDAO {
 	return &birthdayDAOSQL{db: db}
 }
 
-func (br *birthdayDAOSQL) GetBirthdays(limit int, from time.Time) ([]models.Birthday, error) {
-	rows, err := br.db.Query(`SELECT * FROM birthdays WHERE (EXTRACT(MONTH FROM date) > $1) 
-	OR (EXTRACT(MONTH FROM date) == $1 AND EXTRACT(DAY FROM date) >= $2)`, from.Month(), from.Day())
+func (br *birthdayDAOSQL) GetBirthdays(guildId string, limit int, from time.Time) ([]models.Birthday, error) {
+	rows, err := br.db.Query(`SELECT * FROM birthdays JOIN user_guild ON birthdays.user_id = user_guild.user_id
+	WHERE guild_id = $3 AND ((EXTRACT(MONTH FROM date) > $1) 
+	OR (EXTRACT(MONTH FROM date) == $1 AND EXTRACT(DAY FROM date) >= $2))`, from.Month(), from.Day(), guildId)
 	return scanBirthdayRows(rows, err)
 }
 
-func (br *birthdayDAOSQL) GetUpcomingBirthdaysForMonths(months int, from time.Time) ([]models.Birthday, error) {
+func (br *birthdayDAOSQL) GetUpcomingBirthdaysForMonths(guildId string, months int, from time.Time) ([]models.Birthday, error) {
 	var rows *sql.Rows
 	var err error
 	fromMonth := int(from.Month())
 	if fromMonth+months > 12 {
-		rows, err = br.db.Query(`SELECT * FROM birthdays WHERE (EXTRACT(MONTH FROM date) > $1) OR (EXTRACT(MONTH FROM date) <= $2)`, fromMonth, fromMonth+months-12)
+		rows, err = br.db.Query(`SELECT * FROM birthdays JOIN user_guild ON birthdays.user_id = user_guild.user_id
+		WHERE guild_id = $1 AND ((EXTRACT(MONTH FROM date) > $2) OR (EXTRACT(MONTH FROM date) <= $3))`, guildId, fromMonth, fromMonth+months-12)
 	} else {
-		rows, err = br.db.Query(`SELECT * FROM birthday WHERE (EXTRACT(MONTH FROM date) > $1) AND (EXTRACT(MONTH FROM date) <= $2)`, fromMonth, fromMonth+months)
+		rows, err = br.db.Query(`SELECT * FROM birthday JOIN user_guild ON birthdays.user_id = user_guild.user_id
+		WHERE guild_id = $1 AND (EXTRACT(MONTH FROM date) > $2) AND (EXTRACT(MONTH FROM date) <= $3)`, guildId, fromMonth, fromMonth+months)
 	}
 	return scanBirthdayRows(rows, err)
 }
 
-func (br *birthdayDAOSQL) GetBirthdaysOfMonth(month int) ([]models.Birthday, error) {
-	rows, err := br.db.Query(`SELECT * FROM birthdays WHERE EXTRACT(MONTH FROM date) = $1`, month)
+func (br *birthdayDAOSQL) GetBirthdaysByMonth(guildId string, month int) ([]models.Birthday, error) {
+	rows, err := br.db.Query(`SELECT * FROM birthdays JOIN user_guild ON birthdays.user_id = user_guild.user_id
+	WHERE guild_id = $1 AND EXTRACT(MONTH FROM date) = $2`, guildId, month)
+	return scanBirthdayRows(rows, err)
+}
+
+func (br *birthdayDAOSQL) GetBirthdaysByDay(guildId string, day time.Time) ([]models.Birthday, error) {
+	rows, err := br.db.Query(`SELECT * FROM birthdays JOIN user_guild ON birthdays.user_id = user_guild.user_id
+	WHERE guild_id = $1 AND EXTRACT(MONTH from date) = $2 AND EXTRACT(DAY from date) = $3`, guildId, day.Month(), day.Day())
 	return scanBirthdayRows(rows, err)
 }
 
@@ -63,21 +74,54 @@ func scanBirthdayRows(rows *sql.Rows, err error) ([]models.Birthday, error) {
 	return result, nil
 }
 
-func (br *birthdayDAOSQL) GetBirthdayByUserId(userId string) (models.Birthday, error) {
+func (br *birthdayDAOSQL) GetBirthdayByUserId(userId, guildId string) (models.Birthday, error) {
 	var result models.Birthday
-	err := br.db.QueryRow(`SELECT * FROM birthdays WHERE user_id = $1`, userId).Scan(&result.Id, &result.UserId, &result.Date)
+	err := br.db.QueryRow(`SELECT * FROM birthdays JOIN user_guild ON birthdays.user_id = user_guild.user_id
+	WHERE guild_id = $1 AND birthdays.user_id = $2`, guildId, userId).Scan(&result.Id, &result.UserId, &result.Date)
 	return result, err
 }
 
-func (br *birthdayDAOSQL) AddBirthday(userId string, date time.Time) (*models.Birthday, error) {
+func (br *birthdayDAOSQL) AddBirthday(userId, guildId string, date time.Time) (*models.Birthday, error) {
 	result := &models.Birthday{
 		UserId: userId,
 		Date:   date,
 	}
-	err := br.db.QueryRow(`INSERT INTO birthdays (user_id, date) VALUES ($1, $2) RETURNING Id`, userId, date).Scan(&result.Id)
-	return result, err
+
+	tx, err := br.db.Begin()
+	if err != nil {
+		return result, err
+	}
+
+	defer tx.Rollback()
+
+	err = tx.QueryRow(`INSERT INTO birthdays (user_id, date) VALUES ($1, $2) RETURNING Id`, userId, date).Scan(&result.Id)
+	if err != nil {
+		return result, err
+	}
+	_, err = tx.Exec(`INSERT INTO user_guild (user_id, guild_id) VALUES ($1, $2)`, userId, guildId)
+	if err != nil {
+		return result, err
+	}
+	return result, tx.Commit()
 }
 
-func (br *birthdayDAOSQL) RemoveBirthday(userId string) error {
-	return br.db.QueryRow(`DELETE FROM birthdays WHERE user_id = $1`, userId).Err()
+func (br *birthdayDAOSQL) RemoveBirthday(userId, guildId string) error {
+	tx, err := br.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM birthdays WHERE user_id = $1`, userId)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DELETE FROM user_guild WHERE user_id = $1 AND guild_id = $2`, userId, guildId)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }

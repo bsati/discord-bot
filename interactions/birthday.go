@@ -72,13 +72,83 @@ func (domain *birthdayInteractions) CreateHandlers(dao *daos.DAO) *map[string]in
 	return &handlers
 }
 
+func (domain *birthdayInteractions) InitGuild(session *discordgo.Session, guild *discordgo.Guild, dao *daos.DAO) {
+	handleBirthdaysOfDay(session, guild, dao)
+
+	now := time.Now()
+	year, month, day := now.Date()
+	nextMorning := time.Date(year, month, day+1, 8, 0, 0, 0, now.Location())
+
+	go func() {
+		time.Sleep(nextMorning.Sub(now))
+		handleBirthdaysOfDay(session, guild, dao)
+
+		ticker := time.NewTicker(24 * time.Hour)
+
+		go func() {
+			for range ticker.C {
+				handleBirthdaysOfDay(session, guild, dao)
+			}
+		}()
+	}()
+}
+
+func handleBirthdaysOfDay(session *discordgo.Session, guild *discordgo.Guild, dao *daos.DAO) {
+	birthdays, err := dao.GetBirthdaysByDay(guild.ID, time.Now())
+	if err != nil {
+		log.Printf("Error initializing birthdays for guild id %s: %v\n", guild.ID, err)
+	}
+
+	if len(birthdays) == 0 {
+		return
+	}
+
+	usernames := make([]string, len(birthdays))
+	for i, birthday := range birthdays {
+		user, err := session.User(birthday.UserId)
+		if err != nil {
+			log.Printf("Error fetching user with id %s: %v\n", birthday.UserId, err)
+			continue
+		}
+		usernames[i], err = getUsername(session, guild.ID, user)
+		if err != nil {
+			log.Printf("Error retrieving username for user with id %s: %v\n", birthday.UserId, err)
+			continue
+		}
+	}
+
+	channels, err := dao.GetBotChannelByGuild(guild.ID)
+	var channelId string
+	if err != nil {
+		log.Printf("Error fetching designated channels for guild with %s: %v. Using base channel.\n", guild.ID, err)
+		channelId = guild.Channels[0].ID
+	} else if len(channels) == 0 {
+		log.Printf("No designated channels found for guild with id %s. Using base channel.\n", guild.ID)
+		channelId = (*(guild.Channels[0])).ID
+	} else {
+		channelId = channels[0]
+	}
+
+	var usernamesFormatted string
+	usernameCount := len(usernames)
+	if usernameCount == 1 {
+		usernamesFormatted = usernames[0]
+	} else if usernameCount == 2 {
+		usernamesFormatted = fmt.Sprintf("%s and %s", usernames[0], usernames[1])
+	} else {
+		usernamesFormatted = fmt.Sprintf("%s and %s", usernames[0:(usernameCount-2)], usernames[usernameCount-1])
+	}
+
+	session.ChannelMessageSend(channelId, fmt.Sprintf("Happy birthday to: %s! 🎉🎉", usernamesFormatted))
+}
+
 func handleBirthday(dao *daos.DAO) interactionHandler {
 	return func(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
 		parsed, err := time.Parse("02.01.2006", interaction.ApplicationCommandData().Options[0].StringValue())
 		if err != nil {
 			return newInteractionError("The date format you entered is invalid.")
 		}
-		_, err = dao.AddBirthday(interaction.Member.User.ID, parsed)
+		_, err = dao.AddBirthday(interaction.Member.User.ID, interaction.GuildID, parsed)
 		if err != nil {
 			if strings.HasPrefix(err.Error(), "pq: duplicate key") {
 				return newInteractionError("Your birthday has already been added.")
@@ -93,7 +163,7 @@ func handleBirthday(dao *daos.DAO) interactionHandler {
 
 func handleRemoveBirthday(dao *daos.DAO) interactionHandler {
 	return func(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
-		err := dao.RemoveBirthday(interaction.Member.User.ID)
+		err := dao.RemoveBirthday(interaction.Member.User.ID, interaction.GuildID)
 		if err != nil {
 			log.Printf("Error removing birthday: %v\n", err)
 			return newInteractionError("Error removing your birthday.")
@@ -106,10 +176,9 @@ func handleRemoveBirthday(dao *daos.DAO) interactionHandler {
 func handleBirthdayList(dao *daos.DAO) interactionHandler {
 	return func(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
 		optionMap := interactionOptionsToMap(interaction)
-		// "member", "next", "month"
 		if option, ok := optionMap["member"]; ok {
 			user := option.UserValue(session)
-			birthday, err := dao.GetBirthdayByUserId(user.ID)
+			birthday, err := dao.GetBirthdayByUserId(user.ID, interaction.GuildID)
 			if err != nil {
 				return newInteractionError("The user has not registered his birthday.")
 			}
@@ -127,14 +196,22 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 		}
 		if option, ok := optionMap["next"]; ok {
 			nextMonths := int(option.IntValue())
-			birthdays, err := dao.GetUpcomingBirthdaysForMonths(nextMonths, time.Now())
+			birthdays, err := dao.GetUpcomingBirthdaysForMonths(interaction.GuildID, nextMonths, time.Now())
 			if err != nil {
-				log.Printf("Error retrieving birthdays for upcoming months: %v", err)
+				log.Printf("Error retrieving birthdays for upcoming months: %v\n", err)
 				return newInteractionError("Unknown error occured.")
 			}
 			interactionMessageResponse(session, interaction, formatBirthdaysToMessage(session, interaction.GuildID, birthdays))
 			return nil
 		}
+		if option, ok := optionMap["month"]; ok {
+			birthdays, err := dao.GetBirthdaysByMonth(interaction.GuildID, int(option.IntValue()))
+			if err != nil {
+				log.Printf("Error retrieving birthdays for month %d: %v\n", option.IntValue(), err)
+			}
+			interactionMessageResponse(session, interaction, formatBirthdaysToMessage(session, interaction.GuildID, birthdays))
+		}
+		interactionMessageResponse(session, interaction, "Please select one option")
 		return nil
 	}
 }
