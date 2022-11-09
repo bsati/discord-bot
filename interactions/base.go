@@ -29,7 +29,7 @@ func InitInteractionHandling(session *discordgo.Session, dao *daos.DAO) {
 		if handler, ok := registry.handlers[i.ApplicationCommandData().Name]; ok {
 			err := handler(s, i)
 			if err != nil {
-				interactionPrivateMessageResponse(s, i, err.Error())
+				interactionPrivateMessageResponse(s, i, "Error", err.Error())
 			}
 		}
 	})

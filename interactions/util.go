@@ -15,21 +15,33 @@ func interactionOptionsToMap(interaction *discordgo.InteractionCreate) map[strin
 	return optionMap
 }
 
-func interactionMessageResponse(s *discordgo.Session, i *discordgo.InteractionCreate, message string) {
+func interactionMessageResponse(s *discordgo.Session, i *discordgo.InteractionCreate, title, message string) {
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: message,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       title,
+					Description: message,
+					Color:       16705372,
+				},
+			},
 		},
 	})
 }
 
-func interactionPrivateMessageResponse(s *discordgo.Session, i *discordgo.InteractionCreate, message string) {
+func interactionPrivateMessageResponse(s *discordgo.Session, i *discordgo.InteractionCreate, title, message string) {
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Flags:   discordgo.MessageFlagsEphemeral,
-			Content: message,
+			Flags: discordgo.MessageFlagsEphemeral,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       title,
+					Description: message,
+					Color:       16705372,
+				},
+			},
 		},
 	})
 }

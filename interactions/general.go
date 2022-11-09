@@ -35,7 +35,7 @@ func handleChannelDesignation(dao *daos.DAO) interactionHandler {
 			log.Printf("Error setting designated bot channel %s for guild with id %s: %v\n", interaction.ChannelID, interaction.GuildID, err)
 			return newInteractionError("Error setting designated channel.")
 		}
-		interactionPrivateMessageResponse(session, interaction, "Bot channel successfully set.")
+		interactionPrivateMessageResponse(session, interaction, "Designate Channel", "Bot channel successfully set.")
 		return nil
 	}
 }

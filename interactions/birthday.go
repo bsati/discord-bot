@@ -11,6 +11,21 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+var monthMapping = map[int]string{
+	1:  "January",
+	2:  "February",
+	3:  "March",
+	4:  "April",
+	5:  "May",
+	6:  "June",
+	7:  "July",
+	8:  "August",
+	9:  "September",
+	10: "October",
+	11: "November",
+	12: "December",
+}
+
 type birthdayInteractions struct {
 }
 
@@ -156,7 +171,7 @@ func handleBirthday(dao *daos.DAO) interactionHandler {
 			log.Printf("Error adding birthday: %v\n", err)
 			return newInteractionError("Unknown error adding your birthday.")
 		}
-		interactionPrivateMessageResponse(session, interaction, "Birthday registered! 🎉🎉")
+		interactionPrivateMessageResponse(session, interaction, "Success", "Birthday registered! 🎉🎉")
 		return nil
 	}
 }
@@ -168,7 +183,7 @@ func handleRemoveBirthday(dao *daos.DAO) interactionHandler {
 			log.Printf("Error removing birthday: %v\n", err)
 			return newInteractionError("Error removing your birthday.")
 		}
-		interactionPrivateMessageResponse(session, interaction, "Your birthday has been removed!")
+		interactionPrivateMessageResponse(session, interaction, "Success", "Your birthday has been removed!")
 		return nil
 	}
 }
@@ -188,10 +203,10 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 			}
 			today := time.Now()
 			if birthday.Date.Day() == today.Day() && birthday.Date.Month() == today.Month() {
-				interactionMessageResponse(session, interaction, fmt.Sprintf("%s's birthday is today! 🎉🎉", username))
+				interactionMessageResponse(session, interaction, "🎉🎊🎉🎊🎉🎊🎉", fmt.Sprintf("%s's birthday is today!", username))
 				return nil
 			}
-			interactionMessageResponse(session, interaction, fmt.Sprintf("%s's birthday is on %s!", username, birthday.Date.Format("02.01.2006")))
+			interactionMessageResponse(session, interaction, "Birthday", fmt.Sprintf("%s's birthday is on %s!", username, birthday.Date.Format("02.01.2006")))
 			return nil
 		}
 		if option, ok := optionMap["next"]; ok {
@@ -201,17 +216,79 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 				log.Printf("Error retrieving birthdays for upcoming months: %v\n", err)
 				return newInteractionError("Unknown error occured.")
 			}
-			interactionMessageResponse(session, interaction, formatBirthdaysToMessage(session, interaction.GuildID, birthdays))
+
+			embedFields := make([]*discordgo.MessageEmbedField, nextMonths)
+			currentMonth := int(time.Now().Month())
+			activeIndex := 0
+			var builder strings.Builder
+			lastBirthdayMonth := -1
+			for _, birthday := range birthdays {
+				birthdayMonth := int(birthday.Date.Month())
+				lastBirthdayMonth = birthdayMonth
+				if birthdayMonth < currentMonth {
+					birthdayMonth += 12
+				}
+				if birthdayMonth > currentMonth {
+					runnerStart := 0
+					builderString := builder.String()
+					if builderString != "" {
+						embedFields[activeIndex] = &discordgo.MessageEmbedField{
+							Name:   monthMapping[lastBirthdayMonth],
+							Value:  builderString,
+							Inline: false,
+						}
+						builder.Reset()
+						runnerStart = 1
+					}
+					for i := runnerStart; i < (birthdayMonth - currentMonth); i++ {
+						embedFields[activeIndex] = &discordgo.MessageEmbedField{
+							Name:   monthMapping[lastBirthdayMonth],
+							Value:  "No birthdays this month.",
+							Inline: false,
+						}
+						activeIndex++
+					}
+					currentMonth = birthdayMonth
+				}
+				if birthdayMonth == currentMonth {
+					appendFormattedBirthdayString(session, interaction.GuildID, birthday, &builder)
+				}
+			}
+			builderString := builder.String()
+			if builderString != "" {
+				embedFields[activeIndex] = &discordgo.MessageEmbedField{
+					Name:   monthMapping[lastBirthdayMonth],
+					Value:  builderString,
+					Inline: false,
+				}
+			}
+			if len(birthdays) == 0 {
+				interactionPrivateMessageResponse(session, interaction, "Nothing here", "No birthdays registered for next months.")
+			}
+			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Embeds: []*discordgo.MessageEmbed{
+						{
+							Title:  "List of birthdays",
+							Fields: embedFields,
+							Color:  16705372,
+						},
+					},
+				},
+			})
+			// interactionMessageResponse(session, interaction, formatBirthdaysToMessage(session, interaction.GuildID, birthdays))
 			return nil
 		}
 		if option, ok := optionMap["month"]; ok {
-			birthdays, err := dao.GetBirthdaysByMonth(interaction.GuildID, int(option.IntValue()))
+			monthInt := int(option.IntValue())
+			birthdays, err := dao.GetBirthdaysByMonth(interaction.GuildID, monthInt)
 			if err != nil {
 				log.Printf("Error retrieving birthdays for month %d: %v\n", option.IntValue(), err)
 			}
-			interactionMessageResponse(session, interaction, formatBirthdaysToMessage(session, interaction.GuildID, birthdays))
+			interactionMessageResponse(session, interaction, fmt.Sprintf("Birthdays in %s", monthMapping[monthInt]), formatBirthdaysToMessage(session, interaction.GuildID, birthdays))
 		}
-		interactionMessageResponse(session, interaction, "Please select one option")
+		interactionMessageResponse(session, interaction, "Error", "Please select one option")
 		return nil
 	}
 }
@@ -219,20 +296,24 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 func formatBirthdaysToMessage(s *discordgo.Session, guildId string, birthdays []models.Birthday) string {
 	var builder strings.Builder
 	for _, birthday := range birthdays {
-		user, err := s.User(birthday.UserId)
-		if err != nil {
-			log.Printf("Error fetching user with id %s: %v", birthday.UserId, err)
-			continue
-		}
-		username, err := getUsername(s, guildId, user)
-		if err != nil {
-			log.Printf("Error getting username for user with id %s and guild %s", user.ID, guildId)
-			continue
-		}
-		builder.WriteString(birthday.Date.Format("02.01.2006"))
-		builder.WriteString(": ")
-		builder.WriteString(username)
-		builder.WriteRune('\n')
+		appendFormattedBirthdayString(s, guildId, birthday, &builder)
 	}
 	return builder.String()
+}
+
+func appendFormattedBirthdayString(s *discordgo.Session, guildId string, birthday models.Birthday, builder *strings.Builder) {
+	user, err := s.User(birthday.UserId)
+	if err != nil {
+		log.Printf("Error fetching user with id %s: %v", birthday.UserId, err)
+		return
+	}
+	username, err := getUsername(s, guildId, user)
+	if err != nil {
+		log.Printf("Error getting username for user with id %s and guild %s", user.ID, guildId)
+		return
+	}
+	builder.WriteString(birthday.Date.Format("02.01.2006"))
+	builder.WriteString(": ")
+	builder.WriteString(username)
+	builder.WriteRune('\n')
 }
