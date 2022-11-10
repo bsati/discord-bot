@@ -7,13 +7,22 @@ import (
 	"github.com/bsati/discord-bot/models"
 )
 
+// BirthdayDAO represents a DAO for the domain of birthday-handling
 type BirthdayDAO interface {
+	// GetBirtdays returns a list of <limit> stored birthdays after <from> of a certain guild from the store
+	// sorted by their date.
 	GetBirthdays(guildId string, limit int, from time.Time) ([]models.Birthday, error)
+	// GetBirthdayByUserId returns the stored birthday of a user with a given guild if it exists
 	GetBirthdayByUserId(userId, guildId string) (models.Birthday, error)
+	// GetUpcomingBirthdaysForMonths returns a list of stored birthdays for in the next <months> months
 	GetUpcomingBirthdaysForMonths(guildId string, months int, from time.Time) ([]models.Birthday, error)
+	// GetBirthdaysByMonth returns a list of stored birthdays that are registered in the specified month
 	GetBirthdaysByMonth(guildId string, month int) ([]models.Birthday, error)
+	// GetBirthdaysByDay returns a list of stored birthdays that are on the specified day
 	GetBirthdaysByDay(guildId string, day time.Time) ([]models.Birthday, error)
+	// AddBirthday adds a birthday of a user for a specific guild to the store
 	AddBirthday(userId, guildId string, date time.Time) (*models.Birthday, error)
+	// RemoveBirthday removes a stored birthday for a user and guild
 	RemoveBirthday(userId, guildId string) error
 }
 
@@ -21,6 +30,7 @@ type birthdayDAOSQL struct {
 	db *sql.DB
 }
 
+// NewBirthdayDAO creates a new BirthdayDAO for SQL based querying
 func NewBirthdayDAO(db *sql.DB) BirthdayDAO {
 	return &birthdayDAOSQL{db: db}
 }

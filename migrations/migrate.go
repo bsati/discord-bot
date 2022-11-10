@@ -8,6 +8,9 @@ import (
 	"github.com/bsati/discord-bot/core"
 )
 
+// Migrate serves as a small migration scripting engine.
+// SQLs are read from the folder "./migrations/sql" and are applied in order
+// by their version from <fromVersion> to <targetVersion>.
 func Migrate(fromVersion, targetVersion int) {
 	cfg := core.LoadConfig(nil)
 	dbName := os.Getenv("DB_NAME")

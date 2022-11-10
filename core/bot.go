@@ -11,11 +11,14 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// Bot serves as the main struct to hold relevant variables
 type Bot struct {
 	env       *Env
 	dgSession *discordgo.Session
 }
 
+// NewBot creates a Bot instance by loading a config with the specified path
+// and initializes the database connection, interaction handling, ...
 func NewBot(config_path *string) (*Bot, error) {
 	cfg := LoadConfig(config_path)
 	env := BuildEnv(&cfg)
@@ -35,6 +38,8 @@ func NewBot(config_path *string) (*Bot, error) {
 	return &Bot{env: env, dgSession: dg}, nil
 }
 
+// Run starts the Discord session and creates a channel to gracefully close
+// the connection on Ctrl+C
 func (b *Bot) Run() error {
 	err := b.dgSession.Open()
 	if err != nil {

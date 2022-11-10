@@ -6,11 +6,14 @@ import (
 	"os"
 )
 
+// Config represents config variables needed in different parts of the app
 type Config struct {
 	DbConnectionString string
 	BotToken           string
 }
 
+// LoadConfig loads a Config from the given filepath, if specified, else from
+// environment variables.
 func LoadConfig(filepath *string) Config {
 	if filepath == nil {
 		return *loadConfigFromEnv()

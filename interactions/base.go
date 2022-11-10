@@ -7,13 +7,15 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-type InteractionRegistry struct {
+type interactionRegistry struct {
 	handlers               map[string]interactionHandler
 	registeredInteractions map[string][]*interactionInfo
 }
 
+// InitInteractionHandling initializes the interaction handling by constructing
+// an interactionRegistry and adding Discord handlers for events
 func InitInteractionHandling(session *discordgo.Session, dao *daos.DAO) {
-	registry := InteractionRegistry{
+	registry := interactionRegistry{
 		handlers: make(map[string]interactionHandler),
 	}
 
@@ -60,7 +62,7 @@ func InitInteractionHandling(session *discordgo.Session, dao *daos.DAO) {
 	})
 }
 
-func (registry *InteractionRegistry) registerDomain(domain interactionDomain, session *discordgo.Session, dao *daos.DAO) []*discordgo.ApplicationCommand {
+func (registry *interactionRegistry) registerDomain(domain interactionDomain, session *discordgo.Session, dao *daos.DAO) []*discordgo.ApplicationCommand {
 	interactions := domain.GetInteractions(session)
 
 	handlers := domain.CreateHandlers(dao)
@@ -82,8 +84,13 @@ type interactionInfo struct {
 }
 
 type interactionDomain interface {
+	// GetInteractions returns a list of possible interactions for the domain that can be contructed
+	// for different guilds
 	GetInteractions(session *discordgo.Session) []*discordgo.ApplicationCommand
+	// CreateHandlers returns a lsit of handlers for the interactions supplied by GetInteractions
 	CreateHandlers(dao *daos.DAO) *map[string]interactionHandler
+	// InitGuild is triggered for every guild in the ReadyEvent, since some domains e.g. birthdays
+	// need to initialize timers etc.
 	InitGuild(session *discordgo.Session, guild *discordgo.Guild, dao *daos.DAO)
 }
 
