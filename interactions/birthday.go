@@ -217,18 +217,24 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 				return newInteractionError("Unknown error occured.")
 			}
 
+			if len(birthdays) == 0 {
+				interactionPrivateMessageResponse(session, interaction, "Nothing here", "No birthdays registered for next months.")
+				return nil
+			}
+
 			embedFields := make([]*discordgo.MessageEmbedField, nextMonths)
 			currentMonth := int(time.Now().Month())
+			monthIterator := currentMonth
 			activeIndex := 0
 			var builder strings.Builder
 			lastBirthdayMonth := -1
 			for _, birthday := range birthdays {
 				birthdayMonth := int(birthday.Date.Month())
-				lastBirthdayMonth = birthdayMonth
-				if birthdayMonth < currentMonth {
-					birthdayMonth += 12
+				birthdayMonthIterator := birthdayMonth
+				if birthdayMonthIterator < monthIterator {
+					birthdayMonthIterator += 12
 				}
-				if birthdayMonth > currentMonth {
+				if birthdayMonthIterator > monthIterator {
 					runnerStart := 0
 					builderString := builder.String()
 					if builderString != "" {
@@ -239,20 +245,22 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 						}
 						builder.Reset()
 						runnerStart = 1
+						activeIndex++
 					}
-					for i := runnerStart; i < (birthdayMonth - currentMonth); i++ {
+					for i := runnerStart; i < (birthdayMonthIterator-monthIterator)-1; i++ {
 						embedFields[activeIndex] = &discordgo.MessageEmbedField{
-							Name:   monthMapping[lastBirthdayMonth],
+							Name:   monthMapping[(currentMonth+i)%12+1],
 							Value:  "No birthdays this month.",
 							Inline: false,
 						}
 						activeIndex++
 					}
-					currentMonth = birthdayMonth
+					monthIterator = birthdayMonthIterator
 				}
-				if birthdayMonth == currentMonth {
+				if birthdayMonthIterator == monthIterator {
 					appendFormattedBirthdayString(session, interaction.GuildID, birthday, &builder)
 				}
+				lastBirthdayMonth = birthdayMonth
 			}
 			builderString := builder.String()
 			if builderString != "" {
@@ -261,11 +269,18 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 					Value:  builderString,
 					Inline: false,
 				}
+				activeIndex++
 			}
-			if len(birthdays) == 0 {
-				interactionPrivateMessageResponse(session, interaction, "Nothing here", "No birthdays registered for next months.")
+
+			for i := activeIndex; i < nextMonths; i++ {
+				embedFields[i] = &discordgo.MessageEmbedField{
+					Name:   monthMapping[((currentMonth+i)%12)+1],
+					Value:  "No birthdays this month.",
+					Inline: false,
+				}
 			}
-			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+
+			err = session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Embeds: []*discordgo.MessageEmbed{
@@ -277,7 +292,10 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 					},
 				},
 			})
-			// interactionMessageResponse(session, interaction, formatBirthdaysToMessage(session, interaction.GuildID, birthdays))
+			if err != nil {
+				log.Printf("Error creating interaction response: %v", err)
+				return newInteractionError("Unknown error")
+			}
 			return nil
 		}
 		if option, ok := optionMap["month"]; ok {
@@ -294,6 +312,9 @@ func handleBirthdayList(dao *daos.DAO) interactionHandler {
 }
 
 func formatBirthdaysToMessage(s *discordgo.Session, guildId string, birthdays []models.Birthday) string {
+	if len(birthdays) == 0 {
+		return "No birthdays this month."
+	}
 	var builder strings.Builder
 	for _, birthday := range birthdays {
 		appendFormattedBirthdayString(s, guildId, birthday, &builder)
