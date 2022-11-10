@@ -10,5 +10,5 @@ Clone the repository, add a `.env` file containg a `BOT_TOKEN=your_secret_bot_to
 docker-compose build
 docker-compose up
 ```
-in the root directory to have a running instance.
+in the root directory to have a running instance. Additionally you have to adjust the `command` section for the `migrate` component in `docker-compose.yaml` and change the fromVersion (first argument) to "0". This is needed to initialize the database schema.
  
